@@ -26,10 +26,17 @@ Spring 5에 새로 추가된 WebClient는 HTTP 요청을 할 때 사용하는 �
 기존에 작성된 RestTemplate을 지금 당장 모두 들어내고 WebClient로 교체 할 필요는 없다. 문제 없이 잘 동작 하는 코드는 그대로 두고 비동기&논블록킹을 사용해야 하는 경우에만 WebClient를 적용하자.
 
 ## Mono와 Flux
-Mono와 Flux는 Reactvie Stream의 Publisher 인터페이스를 구현한 클래스이다.
+Mono와 Flux는 Reactvie Stream의 [Publisher](https://www.reactive-streams.org/reactive-streams-1.0.0-javadoc/org/reactivestreams/Publisher.html) 인터페이스를 구현한 클래스이다.
 
 - Mono: 0 또는 1개의 결과만을 처리하는 Reactor 객체
 - Flux: 0 또는 N개인 여러 개의 결과를 처리하는 Reactor 객체
+
+```java
+public interface Publisher<T> {
+
+    public void subscribe(Subscriber<? super T> s);
+}
+```
 
 ## WebClient 예제
  
@@ -120,7 +127,7 @@ client.get().uri("https://example.org/")
 ```
 
 ### Synchronous
-`WebClient`를 사용해서 블로킹 동기 방식으로 호출할 수 있다.
+`WebClient`는 블로킹 동기 호출도 지원합니다.
 
 ```
 Person person = client.get().uri("/person/{id}", i).retrieve()
@@ -134,6 +141,8 @@ List<Person> persons = client.get().uri("/persons").retrieve()
 ```
 
 ### Testing
+`WebClient` 사용 해서 테스트 코드를 작성할 때, [OkHttp Mock Server](https://github.com/square/okhttp#mockwebserver) 와 같은 mock web server가 필요합니다.
 
 ## References
-- [WebClient docs](https://docs.spring.io/spring-framework/docs/current/reference/html/web-reactive.html#webflux-client)
+- [Spring WebClient Docs](https://docs.spring.io/spring-framework/docs/current/reference/html/web-reactive.html#webflux-client)
+- [Spring WebClient vs. RestTemplate, Baeldung](https://www.baeldung.com/spring-webclient-resttemplate)
