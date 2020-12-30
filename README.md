@@ -56,24 +56,83 @@ WebClient webClient = WebClient.builder()
         .build();
 ```
 
-### retrieve
+### Retrieve
+`retrieve` 메서드를 사용 하면 ResponseBody를 `Mono` 또는 `Flux` 객체로 바꿔준다. 4xx 또는 5xx 에러를 처리 하려면 `onStatus` 핸들러를 사용한다.
+
+```
+WebClient client = WebClient.create("https://example.org");
+
+Mono<Person> result = client.get()
+        .uri("/persons/{id}", id).accept(MediaType.APPLICATION_JSON)
+        .retrieve()
+        .onStatus(HttpStatus::is4xxClientError, response -> ...)
+        .onStatus(HttpStatus::is5xxServerError, response -> ...)
+        .bodyToMono(Person.class);
+```
+
+### Exchange
+`exchange` 메서드는 `retrieve` 메서드처럼 HTTP 호출 결과를 가져 오는 동작은 비슷하지만 섬세한 처리를 할 수 있다는 점이 다르다.
  
-### exchange
+```
+Mono<Object> entityMono = client.get()
+        .uri("/persons/1")
+        .accept(MediaType.APPLICATION_JSON)
+        .exchangeToMono(response -> {
+            if (response.statusCode().equals(HttpStatus.OK)) {
+                return response.bodyToMono(Person.class);
+            }
+            else if (response.statusCode().is4xxClientError()) {
+                // Suppress error status code
+                return response.bodyToMono(ErrorContainer.class);
+            }
+            else {
+                // Turn to error
+                return response.createException().flatMap(Mono::error);
+            }
+        });
+```
+
+### Retrieve vs Exchange
+`retrieve`와 `exchange` 메서드 반환 타입은 서로 다르다.
+
+```java
+interface RequestHeadersSpec<S extends RequestHeadersSpec<S>> {
+    ResponseSpec retrieve();
+
+    Mono<ClientResponse> exchange();
+}
+```
+
+`ClientResponse` 인터페이스 주석에는 다음과 같은 내용이 있다.
+
+> When using a ClientResponse through the WebClient exchange() method, you have to make sure that the body is consumed or released by using one of the following methods: body(BodyExtractor), bodyToMono(Class)
+
+`DefaultWebClient` 클래스의 retrieve 구현을 보면 내부적으로 `exechange` 메서드를 호출하는 것을 볼 수 있다.
+
+```java
+/**
+ * Default implementation of {@link WebClient}.
+ *
+ * @author Rossen Stoyanchev
+ * @author Brian Clozel
+ * @author Sebastien Deleuze
+ * @since 5.0
+ */
+class DefaultWebClient implements WebClient {
+
+    @Override
+    public ResponseSpec retrieve() {
+        return new DefaultResponseSpec(exchange(), this::createRequest);
+    }
+}
+```
 
 ### Request Body
+`bodyValue`, `body` 메서드를 사용해서 Request Body 컨텐츠를 설정할 수 있다. 
 
 ```
-Flux<Person> personFlux = ... ;
+Person person = new Person(1, "jayden");
 
-Mono<Void> result = client.post()
-        .uri("/persons/{id}", id)
-        .contentType(MediaType.APPLICATION_STREAM_JSON)
-        .body(personFlux, Person.class)
-        .retrieve()
-        .bodyToMono(Void.class);
-```
-
-```
 Mono<Void> result = client.post()
         .uri("/persons/{id}", id)
         .contentType(MediaType.APPLICATION_JSON)
@@ -83,7 +142,9 @@ Mono<Void> result = client.post()
 ```
 
 ### Form Data
-`FormHttpMessageWriter` 클래스가 자동으로 application/x-www-form-urlencoded 을 content에 붙여준다.
+Form Data를 생성 하는 방법은 두 가지가 있다. 첫 번째로 Body에 `MultiValueMap<String, String>` 값을 넣는 방법이 있으며, 두 번째는 `BodyInserters.fromFormData()`를 이용해서 인라인으로 선언하는 방법이 있다. 
+
+`FormHttpMessageWriter` 클래스가 자동으로 `application/x-www-form-urlencoded`을 content에 붙여준다.
 
 ```
 MultiValueMap<String, String> formData = ... ;
@@ -91,6 +152,16 @@ MultiValueMap<String, String> formData = ... ;
 Mono<Void> result = client.post()
         .uri("/path", id)
         .bodyValue(formData)
+        .retrieve()
+        .bodyToMono(Void.class);
+```
+
+or
+
+```
+Mono<Void> result = client.post()
+        .uri("/path", id)
+        .body(fromFormData("k1", "v1").with("k2", "v2"))
         .retrieve()
         .bodyToMono(Void.class);
 ```
@@ -127,7 +198,7 @@ client.get().uri("https://example.org/")
 ```
 
 ### Synchronous
-`WebClient`는 블로킹 동기 호출도 지원합니다.
+`WebClient`는 블로킹 동기 호출도 지원한다.
 
 ```
 Person person = client.get().uri("/person/{id}", i).retrieve()
@@ -141,7 +212,7 @@ List<Person> persons = client.get().uri("/persons").retrieve()
 ```
 
 ### Testing
-`WebClient` 사용 해서 테스트 코드를 작성할 때, [OkHttp Mock Server](https://github.com/square/okhttp#mockwebserver) 와 같은 mock web server가 필요합니다.
+`WebClient` 사용 해서 통합 테스트 코드를 작성할 때, [OkHttp Mock Server](https://github.com/square/okhttp#mockwebserver) 와 같은 mock web server가 필요하다. 테스트 코드 예제는 [WebClientIntegrationTests](https://github.com/spring-projects/spring-framework/blob/master/spring-webflux/src/test/java/org/springframework/web/reactive/function/client/WebClientIntegrationTests.java) 를 참고하면 된다.  
 
 ## References
 - [Spring WebClient Docs](https://docs.spring.io/spring-framework/docs/current/reference/html/web-reactive.html#webflux-client)
